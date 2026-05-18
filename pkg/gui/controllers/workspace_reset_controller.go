@@ -50,7 +50,8 @@ func (self *FilesController) createResetMenu() error {
 							)
 							return nil
 						},
-					})
+					},
+				)
 				return nil
 			},
 			Key:     gocui.NewKeyRune('x'),

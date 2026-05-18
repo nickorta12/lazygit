@@ -67,16 +67,17 @@ func TestGetGithubBaseRemote(t *testing.T) {
 	}
 }
 
-func TestGetAuthenticatedGithubRemotes(t *testing.T) {
+func TestGetAuthenticatedPullRequestRemotes(t *testing.T) {
 	githubRemotes := []githubRemoteInfo{
-		makeGithubRemoteInfo("origin", "github.com"),
-		makeGithubRemoteInfo("fork", "github.com"),
-		makeGithubRemoteInfo("enterprise", "ghe.example.com"),
-		makeGithubRemoteInfo("missing-auth", "no-token.example.com"),
+		makeGithubRemoteInfo("origin", "github", "github.com"),
+		makeGithubRemoteInfo("fork", "github", "github.com"),
+		makeGithubRemoteInfo("enterprise", "github", "ghe.example.com"),
+		makeGithubRemoteInfo("missing-auth", "github", "no-token.example.com"),
+		makeGithubRemoteInfo("gitea", "gitea", "gitea.example.com"),
 	}
 
 	callsByHost := map[string]int{}
-	result := getAuthenticatedGithubRemotes(githubRemotes, func(host string) string {
+	result := getAuthenticatedPullRequestRemotes(githubRemotes, func(provider string, host string) string {
 		callsByHost[host]++
 		switch host {
 		case "github.com":
@@ -89,36 +90,39 @@ func TestGetAuthenticatedGithubRemotes(t *testing.T) {
 	})
 
 	assert.Equal(t, []githubRemoteInfo{
-		makeAuthenticatedGithubRemoteInfo("origin", "github.com", "github-token"),
-		makeAuthenticatedGithubRemoteInfo("fork", "github.com", "github-token"),
-		makeAuthenticatedGithubRemoteInfo("enterprise", "ghe.example.com", "ghe-token"),
+		makeAuthenticatedGithubRemoteInfo("origin", "github", "github.com", "github-token"),
+		makeAuthenticatedGithubRemoteInfo("fork", "github", "github.com", "github-token"),
+		makeAuthenticatedGithubRemoteInfo("enterprise", "github", "ghe.example.com", "ghe-token"),
+		makeAuthenticatedGithubRemoteInfo("gitea", "gitea", "gitea.example.com", ""),
 	}, result)
 	// Two remotes share github.com; the lookup runs only once.
 	assert.Equal(t, map[string]int{
 		"github.com":           1,
 		"ghe.example.com":      1,
 		"no-token.example.com": 1,
+		"gitea.example.com":    1,
 	}, callsByHost)
 }
 
 func makeGithubRemoteInfoList(names ...string) []githubRemoteInfo {
 	return lo.Map(names, func(name string, _ int) githubRemoteInfo {
-		return makeGithubRemoteInfo(name, name)
+		return makeGithubRemoteInfo(name, "github", name)
 	})
 }
 
-func makeGithubRemoteInfo(name string, webDomain string) githubRemoteInfo {
+func makeGithubRemoteInfo(name string, provider string, webDomain string) githubRemoteInfo {
 	return githubRemoteInfo{
 		remote: &models.Remote{Name: name},
 		serviceInfo: hosting_service.ServiceInfo{
+			Provider:  provider,
 			RepoName:  name,
 			WebDomain: webDomain,
 		},
 	}
 }
 
-func makeAuthenticatedGithubRemoteInfo(name string, webDomain string, authToken string) githubRemoteInfo {
-	info := makeGithubRemoteInfo(name, webDomain)
+func makeAuthenticatedGithubRemoteInfo(name string, provider string, webDomain string, authToken string) githubRemoteInfo {
+	info := makeGithubRemoteInfo(name, provider, webDomain)
 	info.authToken = authToken
 	return info
 }

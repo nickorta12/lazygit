@@ -916,7 +916,8 @@ func (self *FilesController) handleAmendCommitPress() error {
 		})
 	}
 
-	return self.c.ConfirmIf(!self.c.UserConfig().Gui.SkipAmendWarning,
+	return self.c.ConfirmIf(
+		!self.c.UserConfig().Gui.SkipAmendWarning,
 		types.ConfirmOpts{
 			Title:  self.c.Tr.AmendLastCommitTitle,
 			Prompt: self.c.Tr.SureToAmend,
@@ -1067,7 +1068,8 @@ func (self *FilesController) openDiffTool(node *filetree.FileNode) error {
 				Reverse:     reverse,
 				IsDirectory: !node.IsFile(),
 				Staged:      !node.GetHasUnstagedChanges(),
-			}),
+			},
+		),
 	)
 }
 

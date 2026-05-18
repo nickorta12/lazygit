@@ -503,7 +503,8 @@ func (self *RefreshHelper) refreshBranches(refreshWorktrees bool, keepBranchSele
 				self.refreshStatus()
 				return nil
 			})
-		})
+		},
+	)
 	if err != nil {
 		self.c.Log.Error(err)
 	}
@@ -812,20 +813,20 @@ func (self *RefreshHelper) refreshGithubPullRequests() {
 	self.c.Mutexes().RefreshingPullRequestsMutex.Lock()
 	defer self.c.Mutexes().RefreshingPullRequestsMutex.Unlock()
 
-	githubRemotes := getAuthenticatedGithubRemotes(self.getGithubRemotes(), self.c.Git().GitHub.GetAuthToken)
-	if len(githubRemotes) == 0 {
+	pullRequestRemotes := getAuthenticatedPullRequestRemotes(self.getPullRequestRemotes(), self.c.Git().GitHub.GetAuthToken)
+	if len(pullRequestRemotes) == 0 {
 		self.c.Model().PullRequests = nil
 		self.c.Model().PullRequestsMap = nil
 		return
 	}
 
-	baseInfo := getGithubBaseRemote(githubRemotes, self.c.Git().GitHub.ConfiguredBaseRemoteName())
+	baseInfo := getGithubBaseRemote(pullRequestRemotes, self.c.Git().GitHub.ConfiguredBaseRemoteName())
 	if baseInfo == nil {
 		self.c.Model().PullRequests = nil
 		self.c.Model().PullRequestsMap = nil
 
 		if !self.githubBaseRemotePromptDismissed[self.c.Git().RepoPaths.RepoPath()] {
-			self.promptForBaseGithubRepo(githubRemotes)
+			self.promptForBaseGithubRepo(pullRequestRemotes)
 		}
 		return
 	}
@@ -839,38 +840,42 @@ type githubRemoteInfo struct {
 	authToken   string
 }
 
-func (self *RefreshHelper) getGithubRemotes() []githubRemoteInfo {
+func (self *RefreshHelper) getPullRequestRemotes() []githubRemoteInfo {
 	return lo.FilterMap(self.c.Model().Remotes, func(remote *models.Remote, _ int) (githubRemoteInfo, bool) {
 		if len(remote.Urls) == 0 {
 			return githubRemoteInfo{}, false
 		}
 		serviceInfo, err := self.c.Git().HostingService.GetServiceInfo(remote.Urls[0])
-		if err != nil || serviceInfo.Provider != "github" {
+		if err != nil || !supportsPullRequestStatus(serviceInfo.Provider) {
 			return githubRemoteInfo{}, false
 		}
 		return githubRemoteInfo{remote: remote, serviceInfo: serviceInfo}, true
 	})
 }
 
-// getAuthenticatedGithubRemotes drops remotes for which no auth token is
-// available and attaches the resolved token to the rest. Token lookups are
-// cached by host so that multiple remotes pointing at the same instance
-// (e.g. origin + a fork on github.com) only trigger one lookup.
-func getAuthenticatedGithubRemotes(githubRemotes []githubRemoteInfo, getAuthToken func(host string) string) []githubRemoteInfo {
+// getAuthenticatedPullRequestRemotes drops GitHub remotes for which no auth
+// token is available and attaches resolved tokens to the rest. Gitea remotes
+// can be queried without a token, so they are kept even when no token exists.
+func getAuthenticatedPullRequestRemotes(githubRemotes []githubRemoteInfo, getAuthToken func(provider string, host string) string) []githubRemoteInfo {
 	tokensByHost := map[string]string{}
 	return lo.FilterMap(githubRemotes, func(info githubRemoteInfo, _ int) (githubRemoteInfo, bool) {
 		host := info.serviceInfo.WebDomain
-		token, cached := tokensByHost[host]
+		tokenKey := info.serviceInfo.Provider + ":" + host
+		token, cached := tokensByHost[tokenKey]
 		if !cached {
-			token = getAuthToken(host)
-			tokensByHost[host] = token
+			token = getAuthToken(info.serviceInfo.Provider, host)
+			tokensByHost[tokenKey] = token
 		}
-		if token == "" {
+		if token == "" && info.serviceInfo.Provider == "github" {
 			return githubRemoteInfo{}, false
 		}
 		info.authToken = token
 		return info, true
 	})
+}
+
+func supportsPullRequestStatus(provider string) bool {
+	return provider == "github" || provider == "gitea" || provider == "codeberg"
 }
 
 func getGithubBaseRemote(githubRemotes []githubRemoteInfo, configuredRemoteName string) *githubRemoteInfo {
@@ -953,7 +958,7 @@ func (self *RefreshHelper) setGithubPullRequests(baseInfo *githubRemoteInfo) {
 
 	prs, err := self.c.Git().GitHub.FetchRecentPRs(branchNames, &baseInfo.serviceInfo, baseInfo.authToken)
 	if err != nil {
-		self.c.Log.Error("error fetching pull requests from GitHub: " + err.Error())
+		self.c.Log.Errorf("error fetching pull requests from %s: %s", baseInfo.serviceInfo.Provider, err.Error())
 		return
 	}
 

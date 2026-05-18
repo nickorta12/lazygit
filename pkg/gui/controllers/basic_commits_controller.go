@@ -104,7 +104,8 @@ func (self *BasicCommitsController) GetKeybindings(opts types.KeybindingsOpts) [
 			Handler:           self.withItem(self.copyRange),
 			GetDisabledReason: self.require(self.itemRangeSelected(self.canCopyCommits)),
 			Description:       self.c.Tr.CherryPickCopy,
-			Tooltip: utils.ResolvePlaceholderString(self.c.Tr.CherryPickCopyTooltip,
+			Tooltip: utils.ResolvePlaceholderString(
+				self.c.Tr.CherryPickCopyTooltip,
 				map[string]string{
 					"paste":  opts.Config.Commits.PasteCommits,
 					"escape": opts.Config.Universal.Return,
@@ -384,7 +385,8 @@ func (self *BasicCommitsController) openDiffTool(commit *models.Commit) error {
 			Reverse:     reverse,
 			IsDirectory: true,
 			Staged:      false,
-		}))
+		},
+	))
 	return err
 }
 

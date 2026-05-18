@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -91,6 +93,26 @@ type GithubRepositoryOwner struct {
 	Login string `json:"login"`
 }
 
+type giteaPullRequest struct {
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+	State  string `json:"state"`
+	Draft  bool   `json:"draft"`
+	Merged bool   `json:"merged"`
+	Head   struct {
+		Label string `json:"label"`
+		Ref   string `json:"ref"`
+		Repo  struct {
+			Owner struct {
+				Login string `json:"login"`
+			} `json:"owner"`
+		} `json:"repo"`
+	} `json:"head"`
+	User struct {
+		Login string `json:"login"`
+	} `json:"user"`
+}
+
 type graphQLRequest struct {
 	Query     string            `json:"query"`
 	Variables map[string]string `json:"variables"`
@@ -138,15 +160,39 @@ func fetchPullRequestsQuery(branches []string, owner string, repo string) (strin
 	return queryString, variables
 }
 
-func (self *GitHubCommands) GetAuthToken(host string) string {
-	token, _ := auth.TokenForHost(host)
-	return token
+func (self *GitHubCommands) GetAuthToken(provider string, host string) string {
+	switch provider {
+	case "github":
+		token, _ := auth.TokenForHost(host)
+		return token
+	case "gitea":
+		return firstNonEmptyEnv("GITEA_TOKEN", "FORGEJO_TOKEN")
+	case "codeberg":
+		return firstNonEmptyEnv("CODEBERG_TOKEN", "GITEA_TOKEN", "FORGEJO_TOKEN")
+	default:
+		return ""
+	}
 }
 
 // FetchRecentPRs fetches recent pull requests using GraphQL. serviceInfo
 // identifies the GitHub instance (github.com or a GitHub Enterprise Server)
 // and the owner/repo to query against.
 func (self *GitHubCommands) FetchRecentPRs(branches []string, serviceInfo *hosting_service.ServiceInfo, token string) ([]*models.GithubPullRequest, error) {
+	if len(branches) == 0 {
+		return nil, nil
+	}
+
+	switch serviceInfo.Provider {
+	case "github":
+		return self.fetchRecentGithubPRs(branches, serviceInfo, token)
+	case "gitea", "codeberg":
+		return self.fetchRecentGiteaPRs(branches, serviceInfo, token)
+	default:
+		return nil, fmt.Errorf("unsupported pull request provider: %s", serviceInfo.Provider)
+	}
+}
+
+func (self *GitHubCommands) fetchRecentGithubPRs(branches []string, serviceInfo *hosting_service.ServiceInfo, token string) ([]*models.GithubPullRequest, error) {
 	endpoint := graphQLEndpoint(serviceInfo.WebDomain)
 	t := time.Now()
 
@@ -193,6 +239,120 @@ func (self *GitHubCommands) FetchRecentPRs(branches []string, serviceInfo *hosti
 	self.Log.Infof("Fetched %d PRs in %s", len(allPRs), time.Since(t))
 
 	return allPRs, nil
+}
+
+func (self *GitHubCommands) fetchRecentGiteaPRs(branches []string, serviceInfo *hosting_service.ServiceInfo, token string) ([]*models.GithubPullRequest, error) {
+	const pageSize = 50
+
+	client := &http.Client{}
+	branchSet := lo.SliceToMap(branches, func(branch string) (string, struct{}) {
+		return branch, struct{}{}
+	})
+	unmatchedBranches := len(branchSet)
+	allPullRequests := []giteaPullRequest{}
+
+	for page := 1; ; page++ {
+		endpoint := giteaPullRequestsEndpoint(serviceInfo, page, pageSize)
+
+		req, err := http.NewRequest("GET", endpoint, nil)
+		if err != nil {
+			return nil, err
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "token "+token)
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			bodyStr := new(bytes.Buffer)
+			_, _ = bodyStr.ReadFrom(resp.Body)
+			_ = resp.Body.Close()
+			return nil, fmt.Errorf("Gitea pull request query failed with status: %s. Body: %s", resp.Status, bodyStr.String())
+		}
+
+		respBytes, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		var result []giteaPullRequest
+		err = json.Unmarshal(respBytes, &result)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, item := range result {
+			if _, ok := branchSet[item.Head.Ref]; ok {
+				delete(branchSet, item.Head.Ref)
+				unmatchedBranches--
+			}
+		}
+		allPullRequests = append(allPullRequests, result...)
+
+		if len(result) < pageSize || unmatchedBranches == 0 {
+			break
+		}
+	}
+
+	prs := giteaPullRequestsToModels(allPullRequests, branches, serviceInfo)
+
+	self.Log.Infof("Fetched %d PRs from %s", len(prs), serviceInfo.Provider)
+
+	return prs, nil
+}
+
+func giteaPullRequestsEndpoint(serviceInfo *hosting_service.ServiceInfo, page int, limit int) string {
+	params := url.Values{}
+	params.Set("state", "all")
+	params.Set("sort", "recentupdate")
+	params.Set("page", fmt.Sprint(page))
+	params.Set("limit", fmt.Sprint(limit))
+
+	return fmt.Sprintf(
+		"https://%s/api/v1/repos/%s/%s/pulls?%s",
+		serviceInfo.WebDomain,
+		url.PathEscape(serviceInfo.Owner),
+		url.PathEscape(serviceInfo.Repository),
+		params.Encode(),
+	)
+}
+
+func giteaPullRequestsToModels(items []giteaPullRequest, branches []string, serviceInfo *hosting_service.ServiceInfo) []*models.GithubPullRequest {
+	branchSet := lo.SliceToMap(branches, func(branch string) (string, struct{}) {
+		return branch, struct{}{}
+	})
+
+	prs := []*models.GithubPullRequest{}
+	for _, item := range items {
+		if _, ok := branchSet[item.Head.Ref]; !ok {
+			continue
+		}
+
+		state := strings.ToUpper(item.State)
+		if item.Merged {
+			state = "MERGED"
+		} else if item.Draft && state != "CLOSED" {
+			state = "DRAFT"
+		}
+
+		prs = append(prs, &models.GithubPullRequest{
+			HeadRefName: item.Head.Ref,
+			Number:      item.Number,
+			Title:       item.Title,
+			State:       state,
+			Url:         fmt.Sprintf("https://%s/%s/%s/pulls/%d", serviceInfo.WebDomain, serviceInfo.Owner, serviceInfo.Repository, item.Number),
+			HeadRepositoryOwner: models.GithubRepositoryOwner{
+				Login: giteaHeadOwner(item),
+			},
+		})
+	}
+
+	return prs
 }
 
 func (self *GitHubCommands) fetchRecentPRsAux(endpoint string, repoOwner string, repoName string, branches []string, token string) ([]*models.GithubPullRequest, error) {
@@ -341,4 +501,25 @@ func graphQLEndpoint(host string) string {
 		return "https://api.github.com/graphql"
 	}
 	return "https://" + host + "/api/graphql"
+}
+
+func giteaHeadOwner(pr giteaPullRequest) string {
+	owner, _, found := strings.Cut(pr.Head.Label, ":")
+	if found && owner != "" {
+		return owner
+	}
+	if pr.Head.Repo.Owner.Login != "" {
+		return pr.Head.Repo.Owner.Login
+	}
+	return pr.User.Login
+}
+
+func firstNonEmptyEnv(names ...string) string {
+	for _, name := range names {
+		if value := os.Getenv(name); value != "" {
+			return value
+		}
+	}
+
+	return ""
 }

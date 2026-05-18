@@ -76,6 +76,70 @@ func TestGraphQLEndpoint(t *testing.T) {
 	}
 }
 
+func TestGiteaPullRequestsToModels(t *testing.T) {
+	open := makeGiteaPullRequest(12, "feature/auth", "contributor:feature/auth", "open", false, false, "Add auth")
+	draft := makeGiteaPullRequest(13, "feature/draft", "jane:feature/draft", "open", true, false, "Draft auth")
+	merged := makeGiteaPullRequest(14, "feature/merged", "jane:feature/merged", "closed", false, true, "Merged auth")
+	irrelevant := makeGiteaPullRequest(15, "feature/other", "jane:feature/other", "open", false, false, "Other")
+	sameRepo := makeGiteaPullRequest(16, "feature/same-repo", "feature/same-repo", "open", false, false, "Same repo")
+	sameRepo.Head.Repo.Owner.Login = "team"
+
+	result := giteaPullRequestsToModels(
+		[]giteaPullRequest{open, draft, merged, irrelevant, sameRepo},
+		[]string{"feature/auth", "feature/draft", "feature/merged", "feature/same-repo"},
+		&hosting_service.ServiceInfo{
+			WebDomain:  "git.example.com",
+			Owner:      "team",
+			Repository: "repo",
+		},
+	)
+
+	assert.Equal(t, []*models.GithubPullRequest{
+		{
+			HeadRefName:         "feature/auth",
+			Number:              12,
+			Title:               "Add auth",
+			State:               "OPEN",
+			Url:                 "https://git.example.com/team/repo/pulls/12",
+			HeadRepositoryOwner: models.GithubRepositoryOwner{Login: "contributor"},
+		},
+		{
+			HeadRefName:         "feature/draft",
+			Number:              13,
+			Title:               "Draft auth",
+			State:               "DRAFT",
+			Url:                 "https://git.example.com/team/repo/pulls/13",
+			HeadRepositoryOwner: models.GithubRepositoryOwner{Login: "jane"},
+		},
+		{
+			HeadRefName:         "feature/merged",
+			Number:              14,
+			Title:               "Merged auth",
+			State:               "MERGED",
+			Url:                 "https://git.example.com/team/repo/pulls/14",
+			HeadRepositoryOwner: models.GithubRepositoryOwner{Login: "jane"},
+		},
+		{
+			HeadRefName:         "feature/same-repo",
+			Number:              16,
+			Title:               "Same repo",
+			State:               "OPEN",
+			Url:                 "https://git.example.com/team/repo/pulls/16",
+			HeadRepositoryOwner: models.GithubRepositoryOwner{Login: "team"},
+		},
+	}, result)
+}
+
+func TestGiteaPullRequestsEndpoint(t *testing.T) {
+	result := giteaPullRequestsEndpoint(&hosting_service.ServiceInfo{
+		WebDomain:  "git.example.com",
+		Owner:      "team",
+		Repository: "repo",
+	}, 2, 50)
+
+	assert.Equal(t, "https://git.example.com/api/v1/repos/team/repo/pulls?limit=50&page=2&sort=recentupdate&state=all", result)
+}
+
 func TestGenerateGithubPullRequestMap(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -379,4 +443,18 @@ func TestGenerateGithubPullRequestMap(t *testing.T) {
 			assert.Equal(t, c.expected, result)
 		})
 	}
+}
+
+func makeGiteaPullRequest(number int, ref string, label string, state string, draft bool, merged bool, title string) giteaPullRequest {
+	pr := giteaPullRequest{
+		Number: number,
+		Title:  title,
+		State:  state,
+		Draft:  draft,
+		Merged: merged,
+	}
+	pr.Head.Ref = ref
+	pr.Head.Label = label
+	pr.User.Login = "fallback"
+	return pr
 }
