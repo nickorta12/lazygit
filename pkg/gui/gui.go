@@ -1128,30 +1128,9 @@ func (gui *Gui) showBreakingChangesMessage() {
 		}
 	}
 
-	// Now collect all release notes texts for versions newer than lastVersion.
-	// We don't need to bother checking the current version here, because we
-	// can't possibly have texts for versions newer than current.
-	type versionAndText struct {
-		version *types.VersionNumber
-		text    string
-	}
-	texts := []versionAndText{}
-	for versionStr, text := range gui.Tr.BreakingChangesByVersion {
-		v, err := types.ParseVersionNumber(versionStr)
-		if err != nil {
-			// Ignore bogus entries in the BreakingChanges map
-			continue
-		}
-		if last.IsOlderThan(v) {
-			texts = append(texts, versionAndText{version: v, text: text})
-		}
-	}
-
+	texts := breakingChangesSince(last, gui.Tr.BreakingChangesByVersion)
 	if len(texts) > 0 {
-		sort.Slice(texts, func(i, j int) bool {
-			return texts[i].version.IsOlderThan(texts[j].version)
-		})
-		message := strings.Join(lo.Map(texts, func(t versionAndText, _ int) string { return t.text }), "\n")
+		message := strings.Join(texts, "\n")
 
 		gui.waitForIntro.Add(1)
 		gui.c.OnUIThread(func() error {
@@ -1169,6 +1148,30 @@ func (gui *Gui) showBreakingChangesMessage() {
 			return nil
 		})
 	}
+}
+
+func breakingChangesSince(last *types.VersionNumber, breakingChangesByVersion map[string]string) []string {
+	type versionAndText struct {
+		version *types.VersionNumber
+		text    string
+	}
+	texts := []versionAndText{}
+	for versionStr, text := range breakingChangesByVersion {
+		v, err := types.ParseVersionNumber(versionStr)
+		if err != nil {
+			// Ignore bogus entries in the BreakingChanges map
+			continue
+		}
+		if last.IsOlderThan(v) {
+			texts = append(texts, versionAndText{version: v, text: text})
+		}
+	}
+
+	sort.Slice(texts, func(i, j int) bool {
+		return texts[i].version.IsOlderThan(texts[j].version)
+	})
+
+	return lo.Map(texts, func(t versionAndText, _ int) string { return t.text })
 }
 
 // setColorScheme sets the color scheme for the app based on the user config
