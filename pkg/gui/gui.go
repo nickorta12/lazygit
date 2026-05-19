@@ -1105,7 +1105,7 @@ func (gui *Gui) showIntroPopupMessage() {
 }
 
 func (gui *Gui) showBreakingChangesMessage() {
-	_, err := types.ParseVersionNumber(gui.Config.GetVersion())
+	current, err := types.ParseVersionNumber(gui.Config.GetVersion())
 	if err != nil {
 		// We don't have a parseable version, so we'll assume it's a developer
 		// build, or a build from HEAD with a version such as 0.40.0-g1234567;
@@ -1128,7 +1128,7 @@ func (gui *Gui) showBreakingChangesMessage() {
 		}
 	}
 
-	texts := breakingChangesSince(last, gui.Tr.BreakingChangesByVersion)
+	texts := breakingChangesSince(last, current, gui.Tr.BreakingChangesByVersion)
 	if len(texts) > 0 {
 		message := strings.Join(texts, "\n")
 
@@ -1150,7 +1150,11 @@ func (gui *Gui) showBreakingChangesMessage() {
 	}
 }
 
-func breakingChangesSince(last *types.VersionNumber, breakingChangesByVersion map[string]string) []string {
+func breakingChangesSince(
+	last *types.VersionNumber,
+	current *types.VersionNumber,
+	breakingChangesByVersion map[string]string,
+) []string {
 	type versionAndText struct {
 		version *types.VersionNumber
 		text    string
@@ -1162,7 +1166,7 @@ func breakingChangesSince(last *types.VersionNumber, breakingChangesByVersion ma
 			// Ignore bogus entries in the BreakingChanges map
 			continue
 		}
-		if last.IsOlderThan(v) {
+		if last.IsOlderThan(v) && !current.IsOlderThan(v) {
 			texts = append(texts, versionAndText{version: v, text: text})
 		}
 	}

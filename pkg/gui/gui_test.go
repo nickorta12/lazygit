@@ -9,13 +9,23 @@ import (
 
 func TestBreakingChangesSinceExcludesFutureReleases(t *testing.T) {
 	lastVersion := &types.VersionNumber{Major: 0, Minor: 61, Patch: 1}
+	currentVersion := &types.VersionNumber{Major: 0, Minor: 61, Patch: 1}
 	notesByVersion := map[string]string{
 		"0.61.1": "current",
 		"0.62.0": "future",
 	}
 
-	/* EXPECTED:
-	assert.Empty(t, breakingChangesSince(lastVersion, notesByVersion))
-	ACTUAL: */
-	assert.Equal(t, []string{"future"}, breakingChangesSince(lastVersion, notesByVersion))
+	assert.Empty(t, breakingChangesSince(lastVersion, currentVersion, notesByVersion))
+}
+
+func TestBreakingChangesSinceIncludesReleasesUpToCurrentVersion(t *testing.T) {
+	lastVersion := &types.VersionNumber{Major: 0, Minor: 60, Patch: 0}
+	currentVersion := &types.VersionNumber{Major: 0, Minor: 62, Patch: 0}
+	notesByVersion := map[string]string{
+		"0.61.0": "first",
+		"0.62.0": "second",
+		"0.63.0": "future",
+	}
+
+	assert.Equal(t, []string{"first", "second"}, breakingChangesSince(lastVersion, currentVersion, notesByVersion))
 }
