@@ -337,7 +337,6 @@ type TranslationSet struct {
 	CommitDescriptionTitle                string
 	CommitDescriptionSubTitle             string
 	CommitDescriptionFooter               string
-	CommitDescriptionFooterTwoBindings    string
 	CommitHooksDisabledSubTitle           string
 	LocalBranchesTitle                    string
 	SearchTitle                           string
@@ -614,10 +613,10 @@ type TranslationSet struct {
 	SelectRemoteRepository                string
 	FetchingPullRequests                  string
 	Keybindings                           string
-	KeybindingsLegend                     string
 	KeybindingsMenuSectionLocal           string
 	KeybindingsMenuSectionGlobal          string
 	KeybindingsMenuSectionNavigation      string
+	KeybindingsTooltip                    string
 	RenameBranch                          string
 	Upstream                              string
 	BranchUpstreamOptionsTitle            string
@@ -892,6 +891,8 @@ type TranslationSet struct {
 	CreateWorktreeFromDetached               string
 	LcWorktree                               string
 	ChangingDirectoryTo                      string
+	DirenvApprovalTitle                      string
+	DirenvApprovalPrompt                     string
 	Name                                     string
 	Branch                                   string
 	Path                                     string
@@ -916,6 +917,7 @@ type TranslationSet struct {
 	SelectedItemIsNotABranch                 string
 	SelectedItemDoesNotHaveFiles             string
 	MultiSelectNotSupportedForSubmodules     string
+	NothingToStageForSubmodule               string
 	CommandDoesNotSupportOpeningInEditor     string
 	CustomCommands                           string
 	NoApplicableCommandsInThisContext        string
@@ -1457,7 +1459,6 @@ func EnglishTranslationSet() *TranslationSet {
 		CommitDescriptionTitle:               "Commit description",
 		CommitDescriptionSubTitle:            "Press {{.togglePanelKeyBinding}} to toggle focus, {{.commitMenuKeybinding}} to open menu",
 		CommitDescriptionFooter:              "Press {{.confirmInEditorKeybinding}} to submit",
-		CommitDescriptionFooterTwoBindings:   "Press {{.confirmInEditorKeybinding1}} or {{.confirmInEditorKeybinding2}} to submit",
 		CommitHooksDisabledSubTitle:          "(hooks disabled)",
 		LocalBranchesTitle:                   "Local branches",
 		SearchTitle:                          "Search",
@@ -1478,6 +1479,7 @@ func EnglishTranslationSet() *TranslationSet {
 		KeybindingsMenuSectionLocal:          "Local",
 		KeybindingsMenuSectionGlobal:         "Global",
 		KeybindingsMenuSectionNavigation:     "Navigation",
+		KeybindingsTooltip:                   "Keybindings: ",
 		RebasingTitle:                        "Rebase '{{.checkedOutBranch}}'",
 		RebasingFromBaseCommitTitle:          "Rebase '{{.checkedOutBranch}}' from marked base",
 		SimpleRebase:                         "Simple rebase onto '{{.ref}}'",
@@ -2013,6 +2015,8 @@ func EnglishTranslationSet() *TranslationSet {
 		CreateWorktreeFromDetached:               "Create worktree from {{.ref}} (detached)",
 		LcWorktree:                               "worktree",
 		ChangingDirectoryTo:                      "Changing directory to {{.path}}",
+		DirenvApprovalTitle:                      "Approve .envrc?",
+		DirenvApprovalPrompt:                     "Press {{.confirmKey}} to run 'direnv allow' and load the environment.\nPress {{.cancelKey}} to skip.\n\n{{.content}}",
 		Name:                                     "Name",
 		Branch:                                   "Branch",
 		Path:                                     "Path",
@@ -2035,6 +2039,7 @@ func EnglishTranslationSet() *TranslationSet {
 		SelectedItemIsNotABranch:                 "Selected item is not a branch",
 		SelectedItemDoesNotHaveFiles:             "Selected item does not have files to view",
 		MultiSelectNotSupportedForSubmodules:     "Multiselection not supported for submodules",
+		NothingToStageForSubmodule:               "Nothing to stage: the parent repo can only stage a new submodule commit, not the uncommitted changes inside a submodule. Commit inside the submodule first.",
 		CommandDoesNotSupportOpeningInEditor:     "This command doesn't support switching to the editor",
 		CustomCommands:                           "Custom commands",
 		NoApplicableCommandsInThisContext:        "(No applicable commands in this context)",
@@ -2267,7 +2272,7 @@ keybinding:
 
 keybinding:
   universal:
-    confirmInEditor: <a-enter>
+    confirmInEditor: [<alt+enter>, <ctrl+s>]
 `,
 		},
 	}

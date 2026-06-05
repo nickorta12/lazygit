@@ -54,7 +54,7 @@ func (self *FilesController) createResetMenu() error {
 				)
 				return nil
 			},
-			Key:     gocui.NewKeyRune('x'),
+			Keys:    menuKey('x'),
 			Tooltip: self.c.Tr.NukeDescription,
 		},
 		{
@@ -73,7 +73,7 @@ func (self *FilesController) createResetMenu() error {
 				)
 				return nil
 			},
-			Key: gocui.NewKeyRune('u'),
+			Keys: menuKey('u'),
 		},
 		{
 			LabelColumns: []string{
@@ -91,7 +91,7 @@ func (self *FilesController) createResetMenu() error {
 				)
 				return nil
 			},
-			Key: gocui.NewKeyRune('c'),
+			Keys: menuKey('c'),
 		},
 		{
 			LabelColumns: []string{
@@ -116,7 +116,7 @@ func (self *FilesController) createResetMenu() error {
 				)
 				return nil
 			},
-			Key: gocui.NewKeyRune('S'),
+			Keys: menuKey('S'),
 		},
 		{
 			LabelColumns: []string{
@@ -134,7 +134,7 @@ func (self *FilesController) createResetMenu() error {
 				)
 				return nil
 			},
-			Key: gocui.NewKeyRune('s'),
+			Keys: menuKey('s'),
 		},
 		{
 			LabelColumns: []string{
@@ -152,7 +152,7 @@ func (self *FilesController) createResetMenu() error {
 				)
 				return nil
 			},
-			Key: gocui.NewKeyRune('m'),
+			Keys: menuKey('m'),
 		},
 		{
 			LabelColumns: []string{
@@ -177,7 +177,7 @@ func (self *FilesController) createResetMenu() error {
 						},
 					})
 			},
-			Key: gocui.NewKeyRune('h'),
+			Keys: menuKey('h'),
 		},
 	}
 
